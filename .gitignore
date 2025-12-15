@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# local env/config
+.env
+config.json
+
+# whatsapp-web.js auth/session data
+.wwebjs_auth/
+.wwebjs_cache/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
