@@ -41,8 +41,27 @@ function applyRuntimeConfig(cfg) {
 applyRuntimeConfig(config);
 
 function containsKeyword(text) {
-  const t = (text || '').toLowerCase();
-  return runtime.kwLower.some((k) => t.includes(k));
+  const raw = String(text || '');
+
+  const extractLineValue = (label) => {
+    const re = new RegExp(`(?:^|\\n)\\s*${label}\\s*:\\s*(.*)`, 'i');
+    const m = raw.match(re);
+    if (!m) return '';
+    return String(m[1] || '').split(/\r?\n/)[0].trim();
+  };
+
+  const valueHasKeyword = (value) => {
+    const v = String(value || '').toLowerCase();
+    return runtime.kwLower.some((k) => v.includes(k));
+  };
+
+  const targetValue = extractLineValue('Ціль');
+  if (targetValue && valueHasKeyword(targetValue)) return true;
+
+  const commentValue = extractLineValue('Коментар');
+  if (commentValue && valueHasKeyword(commentValue)) return true;
+
+  return false;
 }
 
 const client = new Client({

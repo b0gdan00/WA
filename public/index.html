@@ -4,216 +4,259 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WA Forwarder</title>
+
+    <!-- Tailwind + FontAwesome -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
-      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
-      crossorigin="anonymous"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
     />
-    <style>
-      .box-scroll {
-        max-height: 260px;
-        overflow: auto;
-      }
-      .keyword-item {
-        display: flex;
-        gap: 0.5rem;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .keyword-text {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .help-hint {
-        cursor: help;
-        color: #6c757d;
-        text-decoration: underline dotted;
-        font-size: 0.9rem;
-      }
-    </style>
   </head>
-  <body class="bg-body-tertiary">
-    <div class="container py-4" style="max-width: 920px">
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-        <div class="d-flex align-items-center gap-2">
-          <h1 class="h4 m-0">WA Forwarder</h1>
-          <span id="badgeReady" class="badge text-bg-secondary">…</span>
-          <span id="saveState" class="badge text-bg-secondary">…</span>
+  <body class="bg-white text-slate-900">
+    <div class="px-6 py-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="text-lg font-semibold">WA Forwarder</div>
+          <span id="badgeReady" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700"
+            >—</span
+          >
+          <span id="saveState" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700"
+            >—</span
+          >
         </div>
-        <div class="d-flex gap-2">
-          <button id="btnLoadGroups" class="btn btn-outline-primary btn-sm">Підтягнути групи</button>
-          <button id="btnRefresh" class="btn btn-outline-secondary btn-sm">Оновити статус</button>
+
+        <div class="flex flex-wrap gap-2">
+          <button
+            id="btnSave"
+            class="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled
+          >
+            <i class="fa-solid fa-floppy-disk"></i>
+            Зберегти оновлення
+          </button>
+          <button
+            id="btnLoadGroups"
+            class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+          >
+            <i class="fa-solid fa-rotate"></i>
+            Підтягнути групи
+          </button>
+          <button
+            id="btnRefresh"
+            class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+          >
+            <i class="fa-solid fa-signal"></i>
+            Оновити статус
+          </button>
         </div>
       </div>
 
-      <div id="statusWarn" class="alert alert-warning d-none"></div>
-      <div id="statusError" class="alert alert-danger d-none"></div>
+      <div id="unsavedNotice" class="mt-4 hidden rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        Є незбережені зміни. Натисніть «Зберегти оновлення».
+      </div>
+      <div id="statusWarn" class="mt-4 hidden whitespace-pre-line rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
+      <div id="statusError" class="mt-4 hidden whitespace-pre-line rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"></div>
 
-      <div class="card">
-        <div class="card-header">Налаштування (зберігаються автоматично)</div>
-        <div class="card-body">
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label d-flex align-items-center gap-1">
-                Група-призначення
-                <span
-                  class="help-hint"
-                  title="Куди відправляємо знайдені повідомлення. Спочатку натисніть «Отримати групи», потім виберіть потрібну."
-                  tabindex="0"
-                >?</span>
-              </label>
-              <select id="targetSelect" class="form-select">
-                <option value="">(спочатку отримайте список груп)</option>
-              </select>
-              <input id="targetName" type="hidden" />
-              <input id="targetId" type="hidden" />
-              <div class="form-text">Вибір тільки зі списку груп.</div>
+      <div class="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <!-- Left: Groups -->
+        <section class="lg:col-span-3">
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="border-b border-slate-200 px-4 py-3">
+              <div class="text-sm font-semibold text-slate-900">Вибір груп</div>
             </div>
-
-            <div class="col-12">
-              <label class="form-label d-flex align-items-center gap-1">
-                Групи-джерела
-                <span
-                  class="help-hint"
-                  title="Тільки повідомлення з цих груп будуть опрацьовані. Можна вибрати кілька або всі."
-                  tabindex="0"
-                >?</span>
-              </label>
-              <div class="d-flex gap-2 mb-2">
-                <input id="sourcesFilter" class="form-control" placeholder="Фільтр по назві" />
-                <button id="btnSourcesAll" class="btn btn-outline-secondary" type="button">Усі</button>
-                <button id="btnSourcesNone" class="btn btn-outline-secondary" type="button">Жодної</button>
+            <div class="px-4 py-4 space-y-4">
+              <div>
+                <label class="flex items-center gap-2 text-sm font-medium text-slate-900">
+                  Група-призначення
+                  <span class="text-slate-400" title="Куди відправляємо знайдені повідомлення. Спочатку натисніть «Підтягнути групи», потім виберіть потрібну."
+                    ><i class="fa-regular fa-circle-question"></i
+                  ></span>
+                </label>
+                <select
+                  id="targetSelect"
+                  class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                >
+                  <option value="">(спочатку отримайте список груп)</option>
+                </select>
+                <input id="targetName" type="hidden" />
+                <input id="targetId" type="hidden" />
+                <div class="mt-1 text-xs text-slate-500">Вибір тільки зі списку груп.</div>
               </div>
-              <div id="sourcesList" class="border rounded bg-white p-2 box-scroll"></div>
-              <div class="form-text">Працює лише зі знайденими групами WhatsApp.</div>
-            </div>
 
-            <div class="col-12">
-              <label class="form-label d-flex align-items-center gap-1">
-                Ключові слова / фрази
-                <span
-                  class="help-hint"
-                  title="Повідомлення з цих слів або фраз буде переслано. Перевірка нечутлива до регістру."
-                  tabindex="0"
-                >?</span>
-              </label>
-              <div class="input-group">
-                <input id="keywordNew" class="form-control" placeholder="Додайте слово або фразу" />
-                <button id="btnKeywordAdd" class="btn btn-primary" type="button">Додати</button>
-              </div>
-              <div class="form-text">Пошук по тексту повідомлення (фраза повинна зустрітися в повідомленні).</div>
-              <div id="keywordsList" class="list-group mt-2"></div>
-            </div>
-
-            <div class="col-12">
-              <div class="alert alert-light border mb-0">
-                Формат пересилки: <strong>копія</strong> з префіксом <code>[Назва групи] текст повідомлення</code>.
-              </div>
-            </div>
-
-            <div class="col-12">
-              <details class="mt-1">
-                <summary class="text-secondary">Додатково</summary>
-                <div class="row g-3 mt-1">
-                  <div class="col-12 col-md-6">
-                    <div class="form-check mt-2">
-                      <input id="allowOwn" class="form-check-input" type="checkbox" />
-                      <label class="form-check-label d-flex align-items-center gap-1" for="allowOwn">
-                        Пересилати свої повідомлення
-                        <span
-                          class="help-hint"
-                          title="За замовчуванням власні повідомлення ігноруються. Увімкніть, якщо потрібно пересилати й свої."
-                          tabindex="0"
-                        >?</span>
-                      </label>
-                    </div>
-                    <div class="form-check mt-2">
-                      <input id="debug" class="form-check-input" type="checkbox" />
-                      <label class="form-check-label d-flex align-items-center gap-1" for="debug">
-                        Debug логи
-                        <span
-                          class="help-hint"
-                          title="Друкує додаткові діагностичні повідомлення у консоль сервера."
-                          tabindex="0"
-                        >?</span>
-                      </label>
-                    </div>
-                    <div class="form-check mt-2">
-                      <input id="headless" class="form-check-input" type="checkbox" />
-                      <label class="form-check-label d-flex align-items-center gap-1" for="headless">
-                        Headless (для сервера без монітора)
-                        <span
-                          class="help-hint"
-                          title="Для серверів без GUI. Працює швидше, але у разі проблем може знадобитися власний Chrome/Chromium."
-                          tabindex="0"
-                        >?</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-md-6">
-                    <label class="form-label d-flex align-items-center gap-1">
-                      Chrome/Edge executable path
-                      <span
-                        class="help-hint"
-                        title="Якщо потрібен власний браузер замість того, що ставить puppeteer. Вкажіть повний шлях до Chrome/Chromium/Edge."
-                        tabindex="0"
-                      >?</span>
-                    </label>
-                    <input
-                      id="puppeteerExecutablePath"
-                      class="form-control"
-                      placeholder="напр.: /usr/bin/google-chrome або /usr/bin/chromium"
-                    />
-                    <div class="form-text">Знадобиться при headless на деяких Linux-дистрибутивах.</div>
-                  </div>
-
-                  <div class="col-12">
-                    <div class="row g-2">
-                      <div class="col-12 col-md-6">
-                        <label class="form-label d-flex align-items-center gap-1">
-                          Web bind
-                          <span
-                            class="help-hint"
-                            title="Інтерфейс слухає цю адресу. 127.0.0.1 — тільки локально, 0.0.0.0 — на всі інтерфейси (для серверів)."
-                            tabindex="0"
-                          >?</span>
-                        </label>
-                        <input id="webBind" class="form-control" placeholder="127.0.0.1 або 0.0.0.0" />
-                      </div>
-                      <div class="col-12 col-md-6">
-                        <label class="form-label d-flex align-items-center gap-1">
-                          Web port
-                          <span
-                            class="help-hint"
-                            title="Порт веб-інтерфейсу. Переконайтеся, що він відкритий у фаєрволі."
-                            tabindex="0"
-                          >?</span>
-                        </label>
-                        <input id="webPort" class="form-control" type="number" min="1" max="65535" />
-                      </div>
-                      <div class="col-12">
-                        <div class="form-text">Для доступу з мережі оберіть 0.0.0.0 і відкрийте вказаний порт.</div>
-                      </div>
-                    </div>
-                  </div>
+              <div>
+                <div class="flex items-center gap-2 text-sm font-medium text-slate-900">
+                  <span>Групи-джерела</span>
+                  <span class="text-slate-400" title="Тільки повідомлення з цих груп будуть опрацьовані. Можна вибрати кілька або всі."
+                    ><i class="fa-regular fa-circle-question"></i
+                  ></span>
                 </div>
-              </details>
+                <div class="mt-2 flex gap-2">
+                  <input
+                    id="sourcesFilter"
+                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                    placeholder="Фільтр по назві"
+                  />
+                  <button
+                    id="btnSourcesAll"
+                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                    type="button"
+                  >
+                    Усі
+                  </button>
+                  <button
+                    id="btnSourcesNone"
+                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                    type="button"
+                  >
+                    Жодної
+                  </button>
+                </div>
+                <div
+                  id="sourcesList"
+                  class="mt-2 max-h-[360px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-2"
+                ></div>
+                <div class="mt-1 text-xs text-slate-500">Працює лише зі знайденими групами WhatsApp.</div>
+              </div>
             </div>
           </div>
+        </section>
 
-          <div id="saveErr" class="alert alert-danger mt-3 d-none"></div>
-        </div>
+        <!-- Center: Keywords -->
+        <section class="lg:col-span-6">
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="border-b border-slate-200 px-4 py-3">
+              <div class="text-sm font-semibold text-slate-900">Ключові слова / фрази</div>
+            </div>
+            <div class="px-4 py-4 space-y-3">
+              <div class="flex items-center gap-2 text-sm font-medium text-slate-900">
+                <span>Список ключових слів</span>
+                <span class="text-slate-400" title="Повідомлення з цих слів або фраз буде переслано. Перевірка нечутлива до регістру."
+                  ><i class="fa-regular fa-circle-question"></i
+                ></span>
+              </div>
+
+              <div class="flex gap-2">
+                <input
+                  id="keywordNew"
+                  class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                  placeholder="Додайте слово або фразу"
+                />
+                <button
+                  id="btnKeywordAdd"
+                  class="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  type="button"
+                >
+                  <i class="fa-solid fa-plus"></i>
+                  Додати
+                </button>
+              </div>
+
+              <div class="text-xs text-slate-500">
+                Пошук по тексту повідомлення (фраза повинна зустрітися в повідомленні).
+              </div>
+
+              <div id="keywordsList" class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Right: Settings -->
+        <section class="lg:col-span-3">
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="border-b border-slate-200 px-4 py-3">
+              <div class="text-sm font-semibold text-slate-900">Додаткові налаштування</div>
+            </div>
+            <div class="px-4 py-4 space-y-4">
+              <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+                Формат пересилки: <span class="font-semibold">копія</span> з префіксом <code class="rounded bg-white px-1 py-0.5">[Назва групи] текст повідомлення</code>.
+              </div>
+
+              <div class="space-y-3">
+                <label class="flex items-start gap-3 text-sm">
+                  <input id="allowOwn" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900" type="checkbox" />
+                  <span>
+                    <span class="font-medium text-slate-900">Пересилати свої повідомлення</span>
+                    <span class="ml-2 text-slate-400" title="За замовчуванням власні повідомлення ігноруються. Увімкніть, якщо потрібно пересилати й свої."
+                      ><i class="fa-regular fa-circle-question"></i
+                    ></span>
+                  </span>
+                </label>
+
+                <label class="flex items-start gap-3 text-sm">
+                  <input id="debug" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900" type="checkbox" />
+                  <span>
+                    <span class="font-medium text-slate-900">Debug логи</span>
+                    <span class="ml-2 text-slate-400" title="Друкує додаткові діагностичні повідомлення у консоль сервера."
+                      ><i class="fa-regular fa-circle-question"></i
+                    ></span>
+                  </span>
+                </label>
+
+                <label class="flex items-start gap-3 text-sm">
+                  <input id="headless" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900" type="checkbox" />
+                  <span>
+                    <span class="font-medium text-slate-900">Headless (для сервера без монітора)</span>
+                    <span class="ml-2 text-slate-400" title="Для серверів без GUI. Працює швидше, але у разі проблем може знадобитися власний Chrome/Chromium."
+                      ><i class="fa-regular fa-circle-question"></i
+                    ></span>
+                  </span>
+                </label>
+              </div>
+
+              <div>
+                <label class="flex items-center gap-2 text-sm font-medium text-slate-900">
+                  Chrome/Edge executable path
+                  <span class="text-slate-400" title="Якщо потрібен власний браузер замість того, що ставить puppeteer. Вкажіть повний шлях до Chrome/Chromium/Edge."
+                    ><i class="fa-regular fa-circle-question"></i
+                  ></span>
+                </label>
+                <input
+                  id="puppeteerExecutablePath"
+                  class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                  placeholder="напр.: /usr/bin/google-chrome або /usr/bin/chromium"
+                />
+                <div class="mt-1 text-xs text-slate-500">Знадобиться при headless на деяких Linux-дистрибутивах.</div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-3">
+                <div>
+                  <label class="flex items-center gap-2 text-sm font-medium text-slate-900">
+                    Web bind
+                    <span class="text-slate-400" title="Інтерфейс слухає цю адресу. 127.0.0.1 — тільки локально, 0.0.0.0 — на всі інтерфейси (для серверів)."
+                      ><i class="fa-regular fa-circle-question"></i
+                    ></span>
+                  </label>
+                  <input
+                    id="webBind"
+                    class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                    placeholder="127.0.0.1 або 0.0.0.0"
+                  />
+                </div>
+                <div>
+                  <label class="flex items-center gap-2 text-sm font-medium text-slate-900">
+                    Web port
+                    <span class="text-slate-400" title="Порт веб-інтерфейсу. Переконайтеся, що він відкритий у фаєрволі."
+                      ><i class="fa-regular fa-circle-question"></i
+                    ></span>
+                  </label>
+                  <input
+                    id="webPort"
+                    class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                    type="number"
+                    min="1"
+                    max="65535"
+                  />
+                  <div class="mt-1 text-xs text-slate-500">Для доступу з мережі оберіть 0.0.0.0 і відкрийте вказаний порт.</div>
+                </div>
+              </div>
+
+              <div id="saveErr" class="hidden whitespace-pre-line rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"></div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
-    <script
-      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
-      crossorigin="anonymous"
-    ></script>
     <script src="/app.js"></script>
   </body>
 </html>

@@ -1,27 +1,34 @@
 const el = (id) => document.getElementById(id);
 
 function hide(id) {
-  el(id).classList.add('d-none');
+  el(id)?.classList.add('hidden');
 }
 
 function showText(id, msg) {
-  const e = el(id);
-  e.textContent = msg;
-  e.classList.remove('d-none');
+  const element = el(id);
+  if (!element) return;
+  element.textContent = msg;
+  element.classList.remove('hidden');
 }
 
-function setBadge(id, text, klass) {
-  const b = el(id);
-  b.textContent = text;
-  b.className = `badge ${klass}`;
-}
+function setBadge(id, text, variant) {
+  const badge = el(id);
+  if (!badge) return;
 
-function debounce(fn, ms) {
-  let t = null;
-  return (...args) => {
-    if (t) clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
+  const v = String(variant || '');
+  const isSuccess = v.includes('success') || v === 'success';
+  const isWarning = v.includes('warning') || v.includes('amber') || v === 'warning';
+  const isDanger = v.includes('danger') || v.includes('error') || v.includes('rose') || v === 'error';
+  const isPrimary = v.includes('primary') || v === 'primary';
+
+  let klass = 'bg-slate-100 text-slate-700';
+  if (isPrimary) klass = 'bg-slate-900 text-white';
+  if (isSuccess) klass = 'bg-emerald-100 text-emerald-800';
+  if (isWarning) klass = 'bg-amber-100 text-amber-900';
+  if (isDanger) klass = 'bg-rose-100 text-rose-900';
+
+  badge.textContent = text;
+  badge.className = `inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${klass}`;
 }
 
 async function apiGet(path) {
@@ -39,9 +46,9 @@ async function apiPost(path, body) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = json?.error || `${path}: ${res.status}`;
-    const e = new Error(msg);
-    e.details = json;
-    throw e;
+    const err = new Error(msg);
+    err.details = json;
+    throw err;
   }
   return json;
 }
@@ -50,13 +57,30 @@ let groups = [];
 let keywords = [];
 let saving = false;
 let dirty = false;
+let pendingSourceIds = new Set();
 
 function setSaveState(state) {
-  if (state === 'saving') return setBadge('saveState', 'збереження…', 'text-bg-primary');
-  if (state === 'dirty') return setBadge('saveState', 'є зміни', 'text-bg-warning');
-  if (state === 'ok') return setBadge('saveState', 'збережено', 'text-bg-success');
-  if (state === 'error') return setBadge('saveState', 'помилка', 'text-bg-danger');
-  return setBadge('saveState', '…', 'text-bg-secondary');
+  if (state === 'saving') return setBadge('saveState', 'зберігаю…', 'primary');
+  if (state === 'dirty') return setBadge('saveState', 'є зміни', 'warning');
+  if (state === 'ok') return setBadge('saveState', 'збережено', 'success');
+  if (state === 'error') return setBadge('saveState', 'помилка', 'error');
+  return setBadge('saveState', '—', '');
+}
+
+function setDirty(nextDirty) {
+  dirty = !!nextDirty;
+
+  const notice = el('unsavedNotice');
+  if (notice) notice.classList.toggle('hidden', !dirty);
+
+  const btnSave = el('btnSave');
+  if (btnSave) btnSave.disabled = !dirty || saving;
+
+  if (!saving) setSaveState(dirty ? 'dirty' : 'ok');
+}
+
+function markDirty() {
+  setDirty(true);
 }
 
 function normalizeKeyword(s) {
@@ -65,11 +89,12 @@ function normalizeKeyword(s) {
 
 function renderKeywords() {
   const list = el('keywordsList');
+  if (!list) return;
   list.innerHTML = '';
 
   if (!keywords.length) {
     const empty = document.createElement('div');
-    empty.className = 'list-group-item text-secondary';
+    empty.className = 'px-3 py-2 text-sm text-slate-500';
     empty.textContent = 'Немає ключових слів.';
     list.appendChild(empty);
     return;
@@ -77,34 +102,26 @@ function renderKeywords() {
 
   keywords.forEach((kw, idx) => {
     const item = document.createElement('div');
-    item.className = 'list-group-item';
-
-    const row = document.createElement('div');
-    row.className = 'keyword-item';
+    item.className = 'flex items-center justify-between gap-3 px-3 py-2';
 
     const text = document.createElement('div');
-    text.className = 'keyword-text';
+    text.className = 'min-w-0 flex-1 truncate text-sm text-slate-900';
     text.textContent = kw;
-
-    const actions = document.createElement('div');
-    actions.className = 'btn-group btn-group-sm';
 
     const btnDel = document.createElement('button');
     btnDel.type = 'button';
-    btnDel.className = 'btn btn-outline-danger';
-    btnDel.textContent = 'Видалити';
-
-    actions.appendChild(btnDel);
-    row.appendChild(text);
-    row.appendChild(actions);
-    item.appendChild(row);
+    btnDel.className =
+      'inline-flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-100';
+    btnDel.innerHTML = '<i class="fa-solid fa-trash"></i><span>Видалити</span>';
 
     btnDel.addEventListener('click', () => {
       keywords = keywords.filter((_, i) => i !== idx);
       renderKeywords();
-      markDirtyAndAutosave();
+      markDirty();
     });
 
+    item.appendChild(text);
+    item.appendChild(btnDel);
     list.appendChild(item);
   });
 }
@@ -117,39 +134,56 @@ function currentSelectedSourceIds() {
   );
 }
 
-function renderSources() {
-  const filter = (el('sourcesFilter').value || '').trim().toLowerCase();
-  const selected = currentSelectedSourceIds();
+function renderSources(forcedSelectedIds = null) {
+  const filter = (el('sourcesFilter')?.value || '').trim().toLowerCase();
+  const selected = forcedSelectedIds ? new Set(forcedSelectedIds) : currentSelectedSourceIds();
 
   const box = el('sourcesList');
+  if (!box) return;
   box.innerHTML = '';
 
   const visible = groups.filter((g) => g.name.toLowerCase().includes(filter));
   if (visible.length === 0) {
-    box.innerHTML = '<div class="text-secondary small">Немає груп (або нічого не знайдено).</div>';
+    const empty = document.createElement('div');
+    empty.className = 'px-2 py-1 text-sm text-slate-500';
+    empty.textContent = 'Немає груп (або фільтр не співпав).';
+    box.appendChild(empty);
     return;
   }
 
   for (const g of visible) {
     const id = `src_${g.id.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    const row = document.createElement('div');
-    row.className = 'form-check';
-    row.innerHTML = `
-      <input class="form-check-input" type="checkbox" id="${id}" data-source-id="${g.id}">
-      <label class="form-check-label" for="${id}">${g.name}</label>
-    `;
-    const input = row.querySelector('input');
+
+    const row = document.createElement('label');
+    row.className = 'flex cursor-pointer items-start gap-3 rounded-md px-2 py-1 hover:bg-slate-50';
+    row.setAttribute('for', id);
+
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.id = id;
+    input.className = 'mt-1 h-4 w-4 rounded border-slate-300 text-slate-900';
+    input.setAttribute('data-source-id', g.id);
     input.checked = selected.has(g.id);
-    input.addEventListener('change', () => markDirtyAndAutosave());
+    input.addEventListener('change', () => markDirty());
+
+    const name = document.createElement('div');
+    name.className = 'min-w-0 flex-1 text-sm text-slate-900';
+    name.textContent = g.name;
+
+    row.appendChild(input);
+    row.appendChild(name);
     box.appendChild(row);
   }
 }
 
 function fillGroupsIntoTargetSelect() {
   const sel = el('targetSelect');
-  const currentId = el('targetId').value || sel.value;
-  const currentName = el('targetName').value;
-  const currentNameNorm = (currentName || '').toLowerCase();
+  if (!sel) return;
+
+  const currentId = el('targetId')?.value || sel.value;
+  const currentName = el('targetName')?.value || '';
+  const currentNameNorm = currentName.toLowerCase();
+
   sel.innerHTML = '<option value="">(спочатку отримайте список груп)</option>';
   for (const g of groups) {
     const opt = document.createElement('option');
@@ -157,6 +191,7 @@ function fillGroupsIntoTargetSelect() {
     opt.textContent = g.name;
     sel.appendChild(opt);
   }
+
   const byId = currentId && groups.find((g) => g.id === currentId);
   const byName = !byId && currentName ? groups.find((g) => (g.name || '').toLowerCase() === currentNameNorm) : null;
 
@@ -187,6 +222,8 @@ function fillForm(cfg) {
   el('targetId').value = cfg.whatsapp?.target?.id ?? '';
   el('targetName').value = cfg.whatsapp?.target?.name ?? '';
 
+  pendingSourceIds = new Set((cfg.whatsapp?.sources || []).map((s) => s.id).filter(Boolean));
+
   keywords = (cfg.whatsapp?.keywords || []).map(normalizeKeyword).filter(Boolean);
   renderKeywords();
 
@@ -194,10 +231,7 @@ function fillForm(cfg) {
     const targetId = el('targetId').value.trim();
     const targetName = el('targetName').value.trim();
     if (targetId || targetName) fillGroupsIntoTargetSelect();
-    const selectedIds = new Set((cfg.whatsapp?.sources || []).map((s) => s.id).filter(Boolean));
-    for (const input of document.querySelectorAll('input[data-source-id]')) {
-      input.checked = selectedIds.has(input.getAttribute('data-source-id'));
-    }
+    renderSources(pendingSourceIds);
   }
 }
 
@@ -223,9 +257,7 @@ function readForm() {
       puppeteerExecutablePath: el('puppeteerExecutablePath').value.trim(),
       target: {
         id: el('targetSelect').value.trim() || el('targetId').value.trim(),
-        name:
-          el('targetSelect').selectedOptions?.[0]?.textContent?.trim() ||
-          el('targetName').value.trim(),
+        name: el('targetSelect').selectedOptions?.[0]?.textContent?.trim() || el('targetName').value.trim(),
       },
       sources,
       keywords,
@@ -238,7 +270,7 @@ async function refreshStatus() {
   hide('statusWarn');
   try {
     const status = await apiGet('/api/status');
-    setBadge('badgeReady', status.ready ? 'READY' : 'NOT READY', status.ready ? 'text-bg-success' : 'text-bg-secondary');
+    setBadge('badgeReady', status.ready ? 'READY' : 'NOT READY', status.ready ? 'success' : '');
 
     if (status.warnings && status.warnings.length) showText('statusWarn', status.warnings.join('\n'));
     if (status.lastError) showText('statusError', status.lastError);
@@ -251,6 +283,7 @@ async function refreshConfig() {
   try {
     const cfg = await apiGet('/api/config');
     fillForm(cfg);
+    setDirty(false);
   } catch {
     // ignore
   }
@@ -262,8 +295,7 @@ async function loadGroups(silent = false) {
     const data = await apiGet('/api/groups');
     groups = data.groups || [];
     fillGroupsIntoTargetSelect();
-    renderSources();
-    await refreshConfig();
+    renderSources(pendingSourceIds);
   } catch (e) {
     if (!silent) showText('saveErr', e.message || String(e));
   }
@@ -272,13 +304,14 @@ async function loadGroups(silent = false) {
 async function saveNow() {
   if (saving) return;
   saving = true;
+  setDirty(dirty);
   setSaveState('saving');
   hide('saveErr');
   try {
     const body = readForm();
     const res = await apiPost('/api/config', body);
-    dirty = false;
-    setSaveState('ok');
+    setDirty(false);
+    pendingSourceIds = new Set((body.whatsapp?.sources || []).map((s) => s.id).filter(Boolean));
     if (res?.warnings?.length) showText('statusWarn', res.warnings.join('\n'));
     await refreshStatus();
   } catch (e) {
@@ -287,23 +320,12 @@ async function saveNow() {
     showText('saveErr', `${e.message}${details ? `\n${details}` : ''}`);
   } finally {
     saving = false;
+    setDirty(dirty);
   }
 }
 
-const saveDebounced = debounce(() => {
-  if (!dirty) return;
-  saveNow().catch(() => {});
-}, 500);
-
-function markDirtyAndAutosave() {
-  dirty = true;
-  setSaveState('dirty');
-  saveDebounced();
-}
-
-function wireAutosave() {
-  const onAny = () => markDirtyAndAutosave();
-  initTooltips();
+function wireFormHandlers() {
+  const onAny = () => markDirty();
 
   el('webBind').addEventListener('input', onAny);
   el('webPort').addEventListener('input', onAny);
@@ -337,7 +359,7 @@ function wireAutosave() {
     keywords = Array.from(new Set([...keywords, next]));
     el('keywordNew').value = '';
     renderKeywords();
-    markDirtyAndAutosave();
+    onAny();
   });
 
   el('keywordNew').addEventListener('keydown', (e) => {
@@ -345,32 +367,34 @@ function wireAutosave() {
   });
 }
 
+el('btnSave').addEventListener('click', () => saveNow().catch(() => {}));
+
 el('btnRefresh').addEventListener('click', async () => {
   await refreshStatus();
-  await refreshConfig();
+
+  if (!dirty) {
+    await refreshConfig();
+    return;
+  }
+
+  const ok = window.confirm('Є незбережені зміни. Оновлення конфігурації може їх перезаписати. Продовжити?');
+  if (ok) await refreshConfig();
 });
-el('btnLoadGroups').addEventListener('click', () => loadGroups(false));
 
-wireAutosave();
-setSaveState('ok');
+el('btnLoadGroups').addEventListener('click', async () => {
+  await loadGroups(false);
+});
 
-setInterval(() => {
-  refreshStatus().catch(() => {});
-}, 5000);
+wireFormHandlers();
+setDirty(false);
 
 refreshStatus().catch(() => {});
-refreshConfig().catch(() => {});
-loadGroups(true).catch(() => {});
+refreshConfig()
+  .catch(() => {})
+  .finally(() => loadGroups(true).catch(() => {}));
 
-function initTooltips() {
-  if (!window.bootstrap?.Tooltip) return;
-  document.querySelectorAll('.help-hint').forEach((el) => {
-    if (el.dataset.bsToggle === 'tooltip') return;
-    el.dataset.bsToggle = 'tooltip';
-    el.dataset.bsPlacement = 'top';
-    bootstrap.Tooltip.getOrCreateInstance(el, {
-      trigger: 'hover focus',
-      title: el.getAttribute('title') || '',
-    });
-  });
-}
+window.addEventListener('beforeunload', (e) => {
+  if (!dirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
